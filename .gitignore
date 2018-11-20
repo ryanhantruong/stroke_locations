@@ -3,6 +3,10 @@
 *.sublime-workspace
 *.DS_Store
 
+# Configuration files
+*.cfg
+!*.cfg.example
+
 # Data
 data/*
 *.zip
