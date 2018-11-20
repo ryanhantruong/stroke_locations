@@ -1,0 +1,20 @@
+# Editor
+*.sublime-project
+*.sublime-workspace
+*.DS_Store
+
+# Data
+data/*
+*.zip
+
+# Output
+output/*
+*.html
+
+# Notebooks
+*.ipynb*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
