@@ -12,7 +12,12 @@ NORTHEAST = [
 ]
 
 
-def generate_grid(states=['Connecticut'], n=1000, name=None):
+def generate_points(states=['Connecticut'], n=1000, name=None):
+    '''
+    Generate a set of points randomly distributed across the given states
+        according to population density. Points are returned as a dataframe
+        and saved to a csv, using the given name or the names of the states
+    '''
     if name is None:
         name = '_'.join(states)
     data = census.read_states(states)

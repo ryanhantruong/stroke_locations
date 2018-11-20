@@ -1,0 +1,9 @@
+name: stroke_locations
+dependencies:
+- python=3
+- pandas
+- geopandas
+- shapely
+- tqdm
+- pip:
+  - us
