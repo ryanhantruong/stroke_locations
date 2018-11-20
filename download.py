@@ -2,7 +2,9 @@
 Simple tqdm wrapper on urllib.request for downloading large files
 Based on https://github.com/tqdm/tqdm/blob/master/examples/tqdm_wget.py
 '''
+import socket
 import urllib.request
+import urllib.error
 from tqdm import tqdm
 
 
@@ -28,14 +30,26 @@ class TqdmUpTo(tqdm):
         self.update(b * bsize - self.n)  # will also set self.n = b * bsize
 
 
-def download_file(source, desc=None):
+def download_file(source, desc=None, retries=5):
     """
     Download a single file from the give source url to a temporary location,
         displaying a progress bar while downloading, then returns the location
         of the downloaded file
     """
-    with TqdmUpTo(unit='B', unit_scale=True, unit_divisor=1024, miniters=1,
-                  desc=desc) as t:
-        file, _ = urllib.request.urlretrieve(source, reporthook=t.update_to)
+    socket.setdefaulttimeout(30)
+    attempt = 0
+    while attempt < retries:
+        try:
+            with TqdmUpTo(unit='B', unit_scale=True, unit_divisor=1024,
+                          miniters=1, desc=desc) as t:
+                file, _ = urllib.request.urlretrieve(source,
+                                                     reporthook=t.update_to)
+                break
+        except (socket.timeout, urllib.error.URLError):
+            attempt += 1
+            t.write(f'Starting attempt {attempt + 1}')
+
+    if file is None:
+        raise RuntimeError(f"Couldn't download {source} in {retries} attempts")
 
     return file

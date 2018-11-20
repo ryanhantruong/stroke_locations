@@ -1,5 +1,6 @@
 '''Download and read population files from the 2010 census.'''
 import os
+import string
 import zipfile
 import warnings
 import pandas as pd
@@ -17,8 +18,9 @@ def read_states(states=['Connecticut']):
     '''
     Get census data for given states, downloading it if necessary.
         States can be passed by name, abbreviation, or FIPS code
+        Returns data and a list of abbreviations for all states used
     '''
-    states = [us.states.lookup(st) for st in states]
+    states = _normalize_states(states)
     files = []
     for state in states:
         d = _get_path(state)
@@ -35,7 +37,20 @@ def read_states(states=['Connecticut']):
             mes += ' and run again to redownload'
             warnings.warn(mes)
     sub_dfs = [gpd.read_file(f) for f in files]
-    return pd.concat(sub_dfs)
+    return pd.concat(sub_dfs), [st.abbr for st in states]
+
+
+def _normalize_states(states):
+    '''
+    Convert states to standardized names
+    '''
+    standard = []
+    for state in states:
+        found_state = us.states.lookup(state.strip(string.punctuation))
+        if found_state is None:
+            raise ValueError(f"Couldn't match '{state}' to a state")
+        standard.append(found_state)
+    return standard
 
 
 def _get_path(state):
