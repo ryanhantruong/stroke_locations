@@ -1,10 +1,13 @@
 '''Load, manipulate, and write hospital location files'''
 import os
 import pandas as pd
+from tqdm import tqdm
 import download
+import maps
 
 
 HOSPITAL_DIR = os.path.join('data', 'hospitals')
+MASTER_LIST = os.path.join(HOSPITAL_DIR, 'all.csv')
 if not os.path.isdir(HOSPITAL_DIR):
     os.makedirs(HOSPITAL_DIR)
 
@@ -25,14 +28,14 @@ def master_list(update=False):
         Commission certification if it doesn't exist, and optionally updating
         it to capture additions to the JC list.
     '''
-    master_loc = os.path.join(HOSPITAL_DIR, 'all.csv')
+
     try:
-        existing = load_hospitals(master_loc)
+        existing = load_hospitals(MASTER_LIST)
     except FileNotFoundError:
         columns = [
             'CenterID', 'CenterType',
             'OrganizationName', 'City', 'State', 'PostalCode',
-            'Name', 'Address', 'Latitude', 'Longitude',
+            'Name', 'Address', 'Latitude', 'Longitude', 'Failed_Lookup',
             'destination', 'destinationID', 'transfer_time',
             'DTN_1st', 'DTN_Median', 'DTN_3rd',
             'DTP_1st', 'DTP_Median', 'DTP_3rd'
@@ -66,6 +69,7 @@ def master_list(update=False):
         existing = existing.reset_index().set_index(update_index)
 
         new = jc_data[~jc_data.index.isin(existing.index)]
+        new.Failed_Lookup = False
         out = pd.concat([existing, new], sort=False)
         out.update(jc_data)
         out = out.reset_index()
@@ -80,8 +84,56 @@ def master_list(update=False):
 
         out.CenterID = out.CenterID.astype(int)
         out = out.set_index('CenterID', verify_integrity=True)
-        out.to_csv(master_loc, sep='|')
+        _save_master_list(out)
     else:
         out = existing
 
     return out
+
+
+def _save_master_list(data):
+    data.to_csv(MASTER_LIST, sep='|')
+
+
+def update_locations():
+    '''
+    Use google maps to find addresses and coordinates for any hospitals that
+        don't yet have them, meaning all of 'Name', 'Address', 'Latitude', and
+        'Longitude' are NaN. If any of these are filled the hospital will be
+        skipped. To perform manual updates directly edit `all.csv`; the
+        function `maps.get_hospital_location` can be used to manually generate
+        address and location from any search string.
+    '''
+    current = master_list()
+
+    loc_cols = ['Name', 'Address', 'Latitude', 'Longitude']
+    no_data = current[loc_cols].isnull().all(axis=1)
+    to_update = current[no_data & ~current.Failed_Lookup].index
+
+    if to_update.empty:
+        print('No locations to update')
+        return
+
+    client = maps.get_client()
+    for i in tqdm(to_update, desc='Getting Locations'):
+        orgname = current.OrganizationName[i]
+        city = current.City[i]
+        state = current.State[i]
+        postal = current.PostalCode[i]
+
+        searchterm = ' '.join([orgname, city, state, postal])
+
+        results = maps.get_hospital_location(searchterm, client)
+
+        if not results:
+            tqdm.write(f"Found no results for {i}: '{searchterm}'")
+            current.loc[i, 'Failed_Lookup'] = True
+        else:
+            current.loc[i, 'Name'] = results['Name']
+            current.loc[i, 'Address'] = results['Address']
+            current.loc[i, 'Latitude'] = results['Latitude']
+            current.loc[i, 'Longitude'] = results['Longitude']
+            current.loc[i, 'Failed_Lookup'] = False
+
+        # save after each iteration to minimize data loss
+        _save_master_list(current)
