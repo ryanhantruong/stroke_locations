@@ -1,12 +1,11 @@
 '''Load, manipulate, and write hospital location files'''
 import os
-import itertools
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import geopy.distance as geodist
 import download
 import maps
+import geo_utilities as geo
 
 
 HOSPITAL_DIR = os.path.join('data', 'hospitals')
@@ -159,18 +158,18 @@ def update_transfer_destinations():
         return
     comp_data = data[data.CenterType == 'Comprehensive']
 
-    prim_locs = _extract_locations(prim_data)
-    comp_locs = _extract_locations(comp_data)
+    prim_locs = geo.extract_locations(prim_data)
+    comp_locs = geo.extract_locations(comp_data)
 
-    distances = _distance_matrix(prim_locs, comp_locs, prim_data.index,
-                                 comp_data.index)
+    distances = geo.distance_matrix(prim_locs, comp_locs, prim_data.index,
+                                    comp_data.index)
 
     client = maps.get_client()
     for i in tqdm(prim_data.index):
         comps = distances.loc[i]
         include = comps[comps < comps.Cutoff]
-        prim_loc = _extract_locations(prim_data.loc[[i]])
-        comp_locs = _extract_locations(comp_data.loc[include.index])
+        prim_loc = geo.extract_locations(prim_data.loc[[i]])
+        comp_locs = geo.extract_locations(comp_data.loc[include.index])
 
         results = maps.get_transfer_destination(prim_loc, comp_locs, client)
 
@@ -194,27 +193,3 @@ def update_transfer_destinations():
 
         # save after each iteration to minimize data loss on crash/cancel
         _save_master_list(data)
-
-
-def _extract_locations(data):
-    '''Get list of (lat, lng) tuples from dataframe'''
-    recs = data[['Latitude', 'Longitude']].to_records(index=False)
-    return [list(x) for x in recs]
-
-
-def _distance_matrix(row_locs, col_locs, row_names, col_names):
-    '''
-    Get straight line distances between locations, along with a cutoff value
-        for each row which can be used to define "nearby" locations for that
-        row, relative to the closest location
-        row_locs, col_locs -- lists of (lat, lng) tuples
-        row_names, col_names -- indices identifying locations
-    '''
-    dist_vals = [geodist.distance(l1, l2).miles
-                 for l1, l2 in itertools.product(row_locs, col_locs)]
-    dist_vals = np.reshape(dist_vals, (len(row_locs), len(col_locs)))
-    out = pd.DataFrame(dist_vals, columns=col_names, index=row_names)
-    out['Min_dist'] = out.min(axis=1)
-    out['Cutoff'] = out.Min_dist.apply(lambda m: max(m * 1.5, m + 30))
-    out = out.drop(columns='Min_dist')
-    return out
