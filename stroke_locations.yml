@@ -2,6 +2,7 @@ name: stroke_locations
 dependencies:
 - python=3
 - pandas
+- xlrd
 - geopandas
 - shapely
 - tqdm
