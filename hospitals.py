@@ -1,7 +1,10 @@
 '''Load, manipulate, and write hospital location files'''
 import os
+import itertools
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
+import geopy.distance as geodist
 import download
 import maps
 
@@ -135,5 +138,83 @@ def update_locations():
             current.loc[i, 'Longitude'] = results['Longitude']
             current.loc[i, 'Failed_Lookup'] = False
 
-        # save after each iteration to minimize data loss
+        # save after each iteration to minimize data loss on crash/cancel
         _save_master_list(current)
+
+
+def update_transfer_destinations():
+    '''
+    Use google maps to find transfer destinations for all primary hospitals
+        that don't yet have one stored. Doesn't overwrite any data.
+    '''
+    data = master_list()
+    # Only consider hospitals with location information
+    data = data[~data[['Latitude', 'Longitude']].isnull().any(axis=1)]
+    prim_data = data[data.CenterType == 'Primary']
+    # Only find destinations for primaries that don't have one recorded
+    trans_cols = ['destination', 'destinationID', 'transfer_time']
+    prim_data = prim_data[prim_data[trans_cols].isnull().any(axis=1)]
+    if prim_data.empty:
+        print('No primaries to find transfer destinations for')
+        return
+    comp_data = data[data.CenterType == 'Comprehensive']
+
+    prim_locs = _extract_locations(prim_data)
+    comp_locs = _extract_locations(comp_data)
+
+    distances = _distance_matrix(prim_locs, comp_locs, prim_data.index,
+                                 comp_data.index)
+
+    client = maps.get_client()
+    for i in tqdm(prim_data.index):
+        comps = distances.loc[i]
+        include = comps[comps < comps.Cutoff]
+        prim_loc = _extract_locations(prim_data.loc[[i]])
+        comp_locs = _extract_locations(comp_data.loc[include.index])
+
+        results = maps.get_transfer_destination(prim_loc, comp_locs, client)
+
+        if not results:
+            name = prim_data.Name[i]
+            tqdm.write(f'Failed to find transfer dest for {i}: {name}')
+            data.loc[i, 'destination'] = 'Unknown'
+        else:
+            time = results['transfer_time']
+            if pd.isnull(time):
+                hospital_id = np.NaN
+                hospital_name = np.NaN
+            else:
+                hospital_index = results['destination_index']
+                hospital_id = include.index[hospital_index]
+                hospital_name = data.loc[hospital_id, 'Name']
+
+            data.loc[i, 'transfer_time'] = time
+            data.loc[i, 'destinationID'] = hospital_id
+            data.loc[i, 'destination'] = hospital_name
+
+        # save after each iteration to minimize data loss on crash/cancel
+        _save_master_list(data)
+
+
+def _extract_locations(data):
+    '''Get list of (lat, lng) tuples from dataframe'''
+    recs = data[['Latitude', 'Longitude']].to_records(index=False)
+    return [list(x) for x in recs]
+
+
+def _distance_matrix(row_locs, col_locs, row_names, col_names):
+    '''
+    Get straight line distances between locations, along with a cutoff value
+        for each row which can be used to define "nearby" locations for that
+        row, relative to the closest location
+        row_locs, col_locs -- lists of (lat, lng) tuples
+        row_names, col_names -- indices identifying locations
+    '''
+    dist_vals = [geodist.distance(l1, l2).miles
+                 for l1, l2 in itertools.product(row_locs, col_locs)]
+    dist_vals = np.reshape(dist_vals, (len(row_locs), len(col_locs)))
+    out = pd.DataFrame(dist_vals, columns=col_names, index=row_names)
+    out['Min_dist'] = out.min(axis=1)
+    out['Cutoff'] = out.Min_dist.apply(lambda m: max(m * 1.5, m + 30))
+    out = out.drop(columns='Min_dist')
+    return out
