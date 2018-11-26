@@ -74,12 +74,34 @@ def main(args):
         centers = None
         hosp_name = 'None'
     else:
-        centers = hospitals.load_hospitals(hospital_file)
+        try:
+            centers = hospitals.load_hospitals(hospital_file)
+        except KeyError:
+            # hospital_file is comma-separated anonymized file
+            centers = pd.read_csv(hospital_file).set_index('CenterID')
+        all_hosps = hospitals.master_list()
+        centers = all_hosps[all_hosps.index.isin(centers.index)]
         hosp_name = os.path.basename(hospital_file).strip('.csv')
-    points = pd.read_csv(point_file)
 
+    points = pd.read_csv(point_file)
     point_name = os.path.basename(point_file).strip('.csv')
-    name = f'{point_name}_{hosp_name}'
+    if 'Latitude' not in points:
+        # point_file is anonymized, look for its source
+        try:
+            points = pd.read_csv(os.path.join('data', 'points',
+                                              point_name + '.csv'))
+        except FileNotFoundError:
+            points = None
+
+        if points is None:
+            msg = "Couldn't find locations for anonymous points"
+            msg += f" in {point_file}"
+            raise ValueError(msg)
+
+    if point_name == hosp_name:
+        name = point_name
+    else:
+        name = f'{point_name}_{hosp_name}'
 
     create_map(points, centers, name, heatmap=heatmap)
 
