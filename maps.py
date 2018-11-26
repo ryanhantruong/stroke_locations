@@ -6,6 +6,10 @@ import numpy as np
 import pandas as pd
 
 
+class MapError(Exception):
+    pass
+
+
 def get_key(config_path='config'):
     """
     Get the Google API keys from an external config file
@@ -17,7 +21,15 @@ def get_key(config_path='config'):
     """
     config = configparser.ConfigParser()
     config.read(os.path.join(config_path, 'google_maps.cfg'))
-    key = config['api']['api_number']
+    try:
+        key = config['api']['api_number']
+    except KeyError:
+        key = None
+
+    if key is None:
+        msg = 'Google Maps not configured.'
+        msg += f'\n\tEnter API key in {config_path}/google_maps.cfg'
+        raise MapError(msg)
     return key
 
 
