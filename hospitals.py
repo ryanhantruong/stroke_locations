@@ -43,6 +43,7 @@ def master_list(update=False):
             'DTP_1st', 'DTP_Median', 'DTP_3rd'
         ]
         existing = pd.DataFrame(columns=columns).set_index('CenterID')
+        existing.Failed_Lookup = existing.Failed_Lookup.astype(bool)
 
     if update or existing.empty:
         jc_file = download.download_file(JC_URL, 'Joint Commission')
@@ -71,7 +72,7 @@ def master_list(update=False):
         existing = existing.reset_index().set_index(update_index)
 
         new = jc_data[~jc_data.index.isin(existing.index)]
-        new.Failed_Lookup = False
+        new['Failed_Lookup'] = False
         out = pd.concat([existing, new], sort=False)
         out.update(jc_data)
         out = out.reset_index()
