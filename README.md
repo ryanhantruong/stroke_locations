@@ -46,4 +46,3 @@ Fully processing hospitals will generally use one Places API call per hospital a
 
 ----
 <a name="footnote1">1</a>: For the moment [thrombectomy-capable](https://www.jointcommission.org/certification/certification_for_thrombectomycapable_stroke_centers.aspx) stroke centers are treated as primary centers.
-"#test line" 

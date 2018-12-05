@@ -1,5 +1,4 @@
 '''Load, manipulate, and write hospital location files'''
-'''Modified by Han for git testing'''
 import os
 import pandas as pd
 import numpy as np
