@@ -11,6 +11,13 @@
 data/*
 *.zip
 
+# Google Maps plotting library
+gmplot/*
+gmplot
+
+# Scratch
+scratch.py
+
 # Output
 output/*
 *.html

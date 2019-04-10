@@ -5,7 +5,7 @@ import pandas as pd
 import gmplot
 import hospitals
 import maps
-
+import tools
 
 MAP_DIR = os.path.join('output', 'maps')
 if not os.path.isdir(MAP_DIR):
@@ -75,11 +75,18 @@ def main(args):
         hosp_name = 'None'
     else:
         try:
-            centers = hospitals.load_hospitals(hospital_file)
+            # load the hospital file with latitude and longtitude
+            # not de-identified yet
+            centers = hospitals.load_hospitals_han(hospital_file)
         except KeyError:
             # hospital_file is comma-separated anonymized file
-            centers = pd.read_csv(hospital_file).set_index('CenterID')
-        all_hosps = hospitals.master_list()
+            # centers = pd.read_csv(hospital_file).set_index('CenterID')
+            centers = pd.read_csv(hospital_file,index_col=0)
+        all_hosps = hospitals.master_list_offline()
+        all_hosps.set_index('AHA_ID',inplace=True)
+        if centers.index.name == 'HOSP_KEY':
+            # reindex all_hosps into HOSP_KEY
+            all_hosps.index = all_hosps.index.map(tools.get_hosp_keys())
         centers = all_hosps[all_hosps.index.isin(centers.index)]
         hosp_name = os.path.basename(hospital_file).strip('.csv')
 

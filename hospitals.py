@@ -6,13 +6,14 @@ from tqdm import tqdm
 import download
 import maps
 import geo_utilities as geo
-
+from pathlib import Path
 
 HOSPITAL_DIR = os.path.join('data', 'hospitals')
 MASTER_LIST = os.path.join(HOSPITAL_DIR, 'all.csv')
 if not os.path.isdir(HOSPITAL_DIR):
     os.makedirs(HOSPITAL_DIR)
-
+E_DRIVE = Path('E:\\stroke_data\\')
+MASTER_LIST_HAN = E_DRIVE/'inner_join_siteID.csv'
 JC_URL = ("https://www.qualitycheck.org/file.aspx?FolderName=" +
           "StrokeCertification&c=1")
 
@@ -21,10 +22,9 @@ def load_hospitals(hospital_file):
     '''
     Read in the given relative filepath as a table of hospital information
     '''
-    return pd.read_csv(hospital_file, sep='|').set_index('CenterID')
+    return pd.read_csv(hospital_file, sep='|').set_index('AHA_ID')
 
-
-def master_list(update=False):
+def master_list_online(update=False):
     '''
     Get the dataframe of all known hospitals, building it from Joint
         Commission certification if it doesn't exist, and optionally updating
@@ -93,10 +93,16 @@ def master_list(update=False):
 
     return out
 
-
 def _save_master_list(data):
-    data.to_csv(MASTER_LIST, sep='|')
+    data.to_csv(MASTER_LIST_HAN, sep='|',index=False)
 
+
+def master_list_offline(update=False):
+    '''
+    Get the dataframe of hospitals that we have addresses for:
+    As of now: only hospitals in MA
+    '''
+    return pd.read_csv(MASTER_LIST_HAN,sep='|')
 
 def update_locations():
     '''
@@ -107,9 +113,9 @@ def update_locations():
         function `maps.get_hospital_location` can be used to manually generate
         address and location from any search string.
     '''
-    current = master_list()
+    current = master_list_offline()
 
-    loc_cols = ['Name', 'Address', 'Latitude', 'Longitude']
+    loc_cols = ['Latitude', 'Longitude']
     no_data = current[loc_cols].isnull().all(axis=1)
     to_update = current[no_data & ~current.Failed_Lookup].index
 
@@ -141,19 +147,23 @@ def update_locations():
         # save after each iteration to minimize data loss on crash/cancel
         _save_master_list(current)
 
-
 def update_transfer_destinations():
     '''
     Use google maps to find transfer destinations for all primary hospitals
         that don't yet have one stored. Doesn't overwrite any data.
     '''
-    data = master_list()
+    data = master_list_offline()
+    # set AHA_ID as index
+    data.set_index('AHA_ID',inplace=True)
     # Only consider hospitals with location information
     data = data[~data[['Latitude', 'Longitude']].isnull().any(axis=1)]
     prim_data = data[data.CenterType == 'Primary']
     # Only find destinations for primaries that don't have one recorded
     trans_cols = ['destination', 'destinationID', 'transfer_time']
-    prim_data = prim_data[prim_data[trans_cols].isnull().any(axis=1)]
+    # if prim_data.columns.isin(trans_cols).any():
+    #     # if these cols exist in df
+    #     #only find tranfertime for primaries with no data yet
+    #     prim_data = prim_data[prim_data[trans_cols].isnull().any(axis=1)]
     if prim_data.empty:
         print('No primaries to find transfer destinations for')
         return
@@ -186,11 +196,11 @@ def update_transfer_destinations():
             else:
                 hospital_index = results['destination_index']
                 hospital_id = include.index[hospital_index]
-                hospital_name = data.loc[hospital_id, 'Name']
+                hospital_name = data.loc[hospital_id , 'Name']
 
             data.loc[i, 'transfer_time'] = time
             data.loc[i, 'destinationID'] = hospital_id
             data.loc[i, 'destination'] = hospital_name
 
         # save after each iteration to minimize data loss on crash/cancel
-        _save_master_list(data)
+        _save_master_list(data.reset_index())

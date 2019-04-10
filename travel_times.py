@@ -28,7 +28,8 @@ def get_travel_times(point_file, allow_large=False):
         mes += f'\nVerify you want to make up to {max_count} Google Maps calls'
         # max 25 calls per hospital type per point
         raise ValueError(mes)
-    all_hospitals = hospitals.master_list()
+    all_hospitals = hospitals.master_list_han()
+    all_hospitals.set_index('AHA_ID',inplace=True)
 
     prim_data = all_hospitals[all_hospitals.CenterType == 'Primary']
     comp_data = all_hospitals[all_hospitals.CenterType == 'Comprehensive']
