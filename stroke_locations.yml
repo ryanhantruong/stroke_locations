@@ -1,13 +1,22 @@
 name: stroke_locations
+channels:
+  - anaconda
+  - conda-forge
+  - conda-forge/label/cf201901
+  - plotly
 dependencies:
-- python=3
-- pandas
-- xlrd
-- geopandas
-- shapely
-- tqdm
-- pip:
-  - us
-  - gmplot
-  - googlemaps
-  - geopy
+  - python
+  - pandas
+  - matplotlib
+  - numpy
+  - tqdm
+  - plotly=4.1.0
+  - geopandas
+  - plotly-geo
+  - scikit-learn
+  - pip
+  - pip:
+    - us
+    - gmplot
+    - googlemaps
+    - geopy
