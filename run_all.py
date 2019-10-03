@@ -5,6 +5,8 @@ import anonymize
 import data_io
 ''' Run on all methods need to generate inputs for Stroke model '''
 
+# Preparation: follow curate_census_data.py manual instructions and execute script
+
 # Generate patient locations
 # nsample locs across all X states, not nsample locs per state
 states = ['NY', 'MA', 'NJ', 'CT', 'NH', 'RI', 'ME', 'VT']
