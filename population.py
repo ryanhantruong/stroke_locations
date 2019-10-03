@@ -5,15 +5,20 @@ import pandas as pd
 import numpy as np
 import shapely.geometry as sh_geo
 import census
-
+import tools
 
 POINTS_DIR = os.path.join('data', 'points')
 if not os.path.isdir(POINTS_DIR):
     os.makedirs(POINTS_DIR)
 
 NORTHEAST = [
-    'Maine', 'Vermont', 'New Hampshire', 'Massachusetts',
-    'Rhode Island', 'Connecticut', 'New York',
+    'Maine',
+    'Vermont',
+    'New Hampshire',
+    'Massachusetts',
+    'Rhode Island',
+    'Connecticut',
+    'New York',
 ]
 
 
@@ -29,8 +34,36 @@ def generate_points(states=['Connecticut'], n=1000, name=None):
     if name is None:
         name = '_'.join(states)
 
-    grid.to_csv(os.path.join(POINTS_DIR, f'{name}_n={n}.csv'),
-                index=False)
+    #Create LOC_ID
+    grid = grid.reset_index(drop=True)
+    grid['LOC_ID'] = grid.index
+    grid['LOC_ID'] = grid.LOC_ID.apply(
+        lambda x: 'L' + tools.cast_to_int_then_str(x))
+    grid.set_index('LOC_ID', inplace=True)
+    grid.to_csv(os.path.join(POINTS_DIR, f'{name}_n={n}.csv'))
+    return grid
+
+
+def generate_points_age_adjusted(states=['New York'], n=1000, name=None):
+    '''
+    Generate a set of points randomly distributed across the given states
+        according to population density. Points are returned as a dataframe
+        and saved to a csv, using the given name or the names of the states
+    '''
+    data, states = census.read_states_age_adjusted(states)
+    print(f"Generating {n} points")
+    grid = _get_points(data=data, n=n, weights='over_65')
+
+    if name is None:
+        name = '_'.join(states)
+
+    #Create LOC_ID
+    grid = grid.reset_index(drop=True)
+    grid['LOC_ID'] = grid.index
+    grid['LOC_ID'] = grid.LOC_ID.apply(
+        lambda x: 'L' + tools.cast_to_int_then_str(x))
+    grid.set_index('LOC_ID', inplace=True)
+    grid.to_csv(os.path.join(POINTS_DIR, f'{name}_n={n}.csv'))
     return grid
 
 
@@ -44,11 +77,13 @@ def _get_random_point_in_polygon(poly):
             return p
 
 
-def _get_points(data, n=1000):
-    samp = data.sample(n, replace=True, weights='POP10')
+def _get_points(data, n=1000, weights='POP10'):
+    samp = data.sample(n, replace=True, weights=weights)
     points = samp.geometry.apply(_get_random_point_in_polygon)
-    out = pd.DataFrame({'Latitude': points.apply(lambda p: p.y),
-                        'Longitude': points.apply(lambda p: p.x)})
+    out = pd.DataFrame({
+        'Latitude': points.apply(lambda p: p.y),
+        'Longitude': points.apply(lambda p: p.x)
+    })
     return out
 
 
@@ -62,7 +97,7 @@ def main(args):
     n = args.points
     name = args.filename
 
-    generate_points(states, n, name)
+    generate_points_age_adjusted(states, n, name)
 
 
 if __name__ == '__main__':
@@ -73,10 +108,15 @@ if __name__ == '__main__':
     state_help = 'One or more states to include. Defaults to the Northeast.'
     parser.add_argument('state', nargs='*', help=state_help)
     n_help = f'Number of points to generate (default {n_default})'
-    parser.add_argument('--points', '-p', type=int, default=n_default,
+    parser.add_argument('--points',
+                        '-p',
+                        type=int,
+                        default=n_default,
                         help=n_help)
     name_help = f'Name for the resulting file (defaults to state names)'
-    parser.add_argument('--filename', '-f', default=name_default,
+    parser.add_argument('--filename',
+                        '-f',
+                        default=name_default,
                         help=name_help)
     args = parser.parse_args()
     main(args)

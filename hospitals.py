@@ -7,13 +7,14 @@ import download
 import maps
 import geo_utilities as geo
 from pathlib import Path
+import numpy as np
 
 HOSPITAL_DIR = os.path.join('data', 'hospitals')
 MASTER_LIST = os.path.join(HOSPITAL_DIR, 'all.csv')
 if not os.path.isdir(HOSPITAL_DIR):
     os.makedirs(HOSPITAL_DIR)
-E_DRIVE = Path('E:\\stroke_data\\')
-MASTER_LIST_HAN = E_DRIVE/'inner_join_siteID.csv'
+E_DRIVE = Path('Z:\\stroke_data\\processed_data')
+MASTER_LIST_HAN = E_DRIVE / 'inner_join_siteID.csv'
 JC_URL = ("https://www.qualitycheck.org/file.aspx?FolderName=" +
           "StrokeCertification&c=1")
 
@@ -22,7 +23,8 @@ def load_hospitals(hospital_file):
     '''
     Read in the given relative filepath as a table of hospital information
     '''
-    return pd.read_csv(hospital_file, sep='|').set_index('AHA_ID')
+    return pd.read_csv(hospital_file, sep='|')
+
 
 def master_list_online(update=False):
     '''
@@ -35,12 +37,11 @@ def master_list_online(update=False):
         existing = load_hospitals(MASTER_LIST)
     except FileNotFoundError:
         columns = [
-            'CenterID', 'CenterType',
-            'OrganizationName', 'City', 'State', 'PostalCode',
-            'Name', 'Address', 'Latitude', 'Longitude', 'Failed_Lookup',
-            'destination', 'destinationID', 'transfer_time',
-            'DTN_1st', 'DTN_Median', 'DTN_3rd',
-            'DTP_1st', 'DTP_Median', 'DTP_3rd'
+            'CenterID', 'CenterType', 'OrganizationName', 'City', 'State',
+            'PostalCode', 'Name', 'Address', 'Latitude', 'Longitude',
+            'Failed_Lookup', 'destination', 'destinationID', 'transfer_time',
+            'DTN_1st', 'DTN_Median', 'DTN_3rd', 'DTP_1st', 'DTP_Median',
+            'DTP_3rd'
         ]
         existing = pd.DataFrame(columns=columns).set_index('CenterID')
         existing.Failed_Lookup = existing.Failed_Lookup.astype(bool)
@@ -63,8 +64,8 @@ def master_list_online(update=False):
         #           listed certifications are active
         jc_data = jc_data.sort_values('CenterType')
 
-        jc_data = jc_data.drop_duplicates(subset=['OrganizationId', 'City',
-                                                  'State', 'PostalCode'])
+        jc_data = jc_data.drop_duplicates(
+            subset=['OrganizationId', 'City', 'State', 'PostalCode'])
 
         update_index = ['OrganizationName', 'City', 'State', 'PostalCode']
         jc_data = jc_data.set_index(update_index, verify_integrity=True)
@@ -93,8 +94,9 @@ def master_list_online(update=False):
 
     return out
 
-def _save_master_list(data):
-    data.to_csv(MASTER_LIST_HAN, sep='|',index=False)
+
+def _save_master_list(data, savedir=MASTER_LIST_HAN):
+    data.to_csv(savedir, sep='|', index=False)
 
 
 def master_list_offline(update=False):
@@ -102,9 +104,10 @@ def master_list_offline(update=False):
     Get the dataframe of hospitals that we have addresses for:
     As of now: only hospitals in MA
     '''
-    return pd.read_csv(MASTER_LIST_HAN,sep='|')
+    return pd.read_csv(MASTER_LIST_HAN, sep='|')
 
-def update_locations():
+
+def update_locations(current=None):
     '''
     Use google maps to find addresses and coordinates for any hospitals that
         don't yet have them, meaning all of 'Name', 'Address', 'Latitude', and
@@ -113,11 +116,18 @@ def update_locations():
         function `maps.get_hospital_location` can be used to manually generate
         address and location from any search string.
     '''
-    current = master_list_offline()
+    if current is None:
+        current = master_list_offline()
+        savedir = MASTER_LIST_HAN
+    else:
+        savedir = current
+        current = pd.read_csv(current, sep='|')
 
     loc_cols = ['Latitude', 'Longitude']
     no_data = current[loc_cols].isnull().all(axis=1)
-    to_update = current[no_data & ~current.Failed_Lookup].index
+    failed_lookup = np.where(current.Failed_Lookup.isnull(), False,
+                             current.Failed_Lookup).astype(bool)
+    to_update = current[no_data & ~failed_lookup].index
 
     if to_update.empty:
         print('No locations to update')
@@ -126,11 +136,14 @@ def update_locations():
     client = maps.get_client()
     for i in tqdm(to_update, desc='Getting Locations'):
         orgname = current.OrganizationName[i]
+        address = current.Source_Address[i]
+        if not isinstance(address, str):  # interpet nan type
+            if str(address) == 'nan': address = ''
         city = current.City[i]
         state = current.State[i]
         postal = current.PostalCode[i]
 
-        searchterm = ' '.join([orgname, city, state, postal])
+        searchterm = ' '.join([orgname, address, city, state, postal])
 
         results = maps.get_hospital_location(searchterm, client)
 
@@ -145,47 +158,51 @@ def update_locations():
             current.loc[i, 'Failed_Lookup'] = False
 
         # save after each iteration to minimize data loss on crash/cancel
-        _save_master_list(current)
+        _save_master_list(current, savedir=savedir)
 
-def update_transfer_destinations():
+
+def update_transfer_destinations(data=None):
     '''
     Use google maps to find transfer destinations for all primary hospitals
         that don't yet have one stored. Doesn't overwrite any data.
     '''
-    data = master_list_offline()
-    # set AHA_ID as index
-    data.set_index('AHA_ID',inplace=True)
+    if data is None:
+        data = master_list_offline()
+        savedir = MASTER_LIST_HAN
+    else:
+        savedir = data
+        data = pd.read_csv(data, sep='|')
+
+    data.set_index('HOSP_ID', inplace=True)
+    # only calculate info for hospitals we dont have data for yet
+    no_destination = data[['destination', 'destinationID',
+                           'transfer_time']].isnull().any(axis=1)
     # Only consider hospitals with location information
-    data = data[~data[['Latitude', 'Longitude']].isnull().any(axis=1)]
-    prim_data = data[data.CenterType == 'Primary']
-    # Only find destinations for primaries that don't have one recorded
-    trans_cols = ['destination', 'destinationID', 'transfer_time']
-    # if prim_data.columns.isin(trans_cols).any():
-    #     # if these cols exist in df
-    #     #only find tranfertime for primaries with no data yet
-    #     prim_data = prim_data[prim_data[trans_cols].isnull().any(axis=1)]
-    if prim_data.empty:
+    has_data = ~data[['Latitude', 'Longitude']].isnull().any(axis=1)
+    to_update = data.loc[has_data & no_destination, :]
+
+    prim_to_update = to_update[to_update.CenterType == 'Primary']
+    if prim_to_update.empty:
         print('No primaries to find transfer destinations for')
         return
+
     comp_data = data[data.CenterType == 'Comprehensive']
-
-    prim_locs = geo.extract_locations(prim_data)
+    prim_locs = geo.extract_locations(prim_to_update)
     comp_locs = geo.extract_locations(comp_data)
-
-    distances = geo.distance_matrix(prim_locs, comp_locs, prim_data.index,
+    distances = geo.distance_matrix(prim_locs, comp_locs, prim_to_update.index,
                                     comp_data.index)
 
     client = maps.get_client()
-    for i in tqdm(prim_data.index):
+    for i in tqdm(prim_to_update.index):
         comps = distances.loc[i]
         include = comps[comps < comps.Cutoff]
-        prim_loc = geo.extract_locations(prim_data.loc[[i]])
+        prim_loc = geo.extract_locations(prim_to_update.loc[[i]])
         comp_locs = geo.extract_locations(comp_data.loc[include.index])
 
         results = maps.get_transfer_destination(prim_loc, comp_locs, client)
 
         if not results:
-            name = prim_data.Name[i]
+            name = prim_to_update.Name[i]
             tqdm.write(f'Failed to find transfer dest for {i}: {name}')
             data.loc[i, 'destination'] = 'Unknown'
         else:
@@ -196,11 +213,11 @@ def update_transfer_destinations():
             else:
                 hospital_index = results['destination_index']
                 hospital_id = include.index[hospital_index]
-                hospital_name = data.loc[hospital_id , 'Name']
+                hospital_name = data.loc[hospital_id, 'Name']
 
             data.loc[i, 'transfer_time'] = time
             data.loc[i, 'destinationID'] = hospital_id
             data.loc[i, 'destination'] = hospital_name
 
         # save after each iteration to minimize data loss on crash/cancel
-        _save_master_list(data.reset_index())
+        _save_master_list(data.reset_index(), savedir=savedir)

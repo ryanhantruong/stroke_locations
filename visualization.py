@@ -62,6 +62,7 @@ def create_map(points, centers, name, center=None, zoom=7, heatmap=True):
     if heatmap:
         name += '_heatmap'
     plotter.draw(os.path.join(MAP_DIR, f'{name}.html'))
+    return plotter
 
 
 def main(args):

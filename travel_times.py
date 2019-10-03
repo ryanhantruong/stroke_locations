@@ -15,12 +15,12 @@ if not os.path.isdir(TIMES_DIR):
 LARGE_LIMIT = 10
 
 
-def get_travel_times(point_file, allow_large=False):
+def get_travel_times(point_file, allow_large=False,hospital_address=None):
     '''
     Get travel times from each of the points in the given file to nearby
         hospitals in the master hospital file
     '''
-    points = pd.read_csv(point_file)
+    points = pd.read_csv(point_file).set_index('LOC_ID')
     if not allow_large and points.shape[0] > LARGE_LIMIT:
         point_count = points.shape[0]
         mes = f"Attempting to run on {point_count} points."
@@ -28,8 +28,12 @@ def get_travel_times(point_file, allow_large=False):
         mes += f'\nVerify you want to make up to {max_count} Google Maps calls'
         # max 25 calls per hospital type per point
         raise ValueError(mes)
-    all_hospitals = hospitals.master_list_han()
-    all_hospitals.set_index('AHA_ID',inplace=True)
+
+    if hospital_address is None:
+        all_hospitals = hospitals.master_list_han()
+    else:
+        all_hospitals = pd.read_csv(hospital_address,sep='|')
+    all_hospitals.set_index('HOSP_ID',inplace=True)
 
     prim_data = all_hospitals[all_hospitals.CenterType == 'Primary']
     comp_data = all_hospitals[all_hospitals.CenterType == 'Comprehensive']
@@ -41,7 +45,7 @@ def get_travel_times(point_file, allow_large=False):
                                                          'Longitude']))
 
     points_name = os.path.basename(point_file)
-    all_times.to_csv(os.path.join(TIMES_DIR, points_name), index=False)
+    all_times.to_csv(os.path.join(TIMES_DIR, points_name))
 
 
 def _get_travel_times(points, some_hospitals, desc=None):

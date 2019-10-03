@@ -4,19 +4,22 @@
 *.DS_Store
 
 # Configuration files
+config/*
 *.cfg
-!*.cfg.example
+!*.example
 
 # Data
 data/*
 *.zip
+data_io.py
+census_data/*
 
 # Google Maps plotting library
 gmplot/*
 gmplot
 
 # Scratch
-scratch.py
+scratch*.py
 
 # Output
 output/*
