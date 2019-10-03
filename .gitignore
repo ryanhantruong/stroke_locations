@@ -13,6 +13,7 @@ data/*
 *.zip
 data_io.py
 census_data/*
+!census_data/SF2010
 
 # Google Maps plotting library
 gmplot/*
