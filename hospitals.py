@@ -1,5 +1,4 @@
 '''Load, manipulate, and write hospital location files'''
-import os
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -7,23 +6,29 @@ import download
 import maps
 import geo_utilities as geo
 from pathlib import Path
-import numpy as np
+import data_io
 
-HOSPITAL_DIR = os.path.join('data', 'hospitals')
-MASTER_LIST = os.path.join(HOSPITAL_DIR, 'all.csv')
-if not os.path.isdir(HOSPITAL_DIR):
-    os.makedirs(HOSPITAL_DIR)
-E_DRIVE = Path('Z:\\stroke_data\\processed_data')
-MASTER_LIST_HAN = E_DRIVE / 'inner_join_siteID.csv'
+HOSPITAL_DIR = Path('data') / 'hospitals'
+if not HOSPITAL_DIR.exists(): HOSPITAL_DIR.mkdir()
+MASTER_LIST = HOSPITAL_DIR / 'all.csv'
+MASTER_LIST_OFFLINE = data_io.HOSPITAL_ADDY
 JC_URL = ("https://www.qualitycheck.org/file.aspx?FolderName=" +
           "StrokeCertification&c=1")
 
 
-def load_hospitals(hospital_file):
+def load_hospitals(hospital_file=MASTER_LIST_OFFLINE):
     '''
     Read in the given relative filepath as a table of hospital information
     '''
-    return pd.read_csv(hospital_file, sep='|')
+    if hospital_file is None: hospital_file = MASTER_LIST_OFFLINE
+    hospitals = pd.read_csv(hospital_file, sep='|')
+    if "HOSP_ID" in hospitals.columns:
+        hospitals.set_index("HOSP_ID", inplace=True)
+    return hospitals
+
+
+def _save_master_list(data, savedir=MASTER_LIST_OFFLINE):
+    data.to_csv(savedir, sep='|')
 
 
 def master_list_online(update=False):
@@ -33,9 +38,9 @@ def master_list_online(update=False):
         it to capture additions to the JC list.
     '''
 
-    try:
+    if MASTER_LIST.exists():
         existing = load_hospitals(MASTER_LIST)
-    except FileNotFoundError:
+    else:
         columns = [
             'CenterID', 'CenterType', 'OrganizationName', 'City', 'State',
             'PostalCode', 'Name', 'Address', 'Latitude', 'Longitude',
@@ -88,23 +93,11 @@ def master_list_online(update=False):
 
         out.CenterID = out.CenterID.astype(int)
         out = out.set_index('CenterID', verify_integrity=True)
-        _save_master_list(out)
+        _save_master_list(out, savedir=MASTER_LIST)
     else:
         out = existing
 
     return out
-
-
-def _save_master_list(data, savedir=MASTER_LIST_HAN):
-    data.to_csv(savedir, sep='|', index=False)
-
-
-def master_list_offline(update=False):
-    '''
-    Get the dataframe of hospitals that we have addresses for:
-    As of now: only hospitals in MA
-    '''
-    return pd.read_csv(MASTER_LIST_HAN, sep='|')
 
 
 def update_locations(current=None):
@@ -117,11 +110,11 @@ def update_locations(current=None):
         address and location from any search string.
     '''
     if current is None:
-        current = master_list_offline()
-        savedir = MASTER_LIST_HAN
+        current = load_hospitals()
+        savedir = MASTER_LIST_OFFLINE
     else:
         savedir = current
-        current = pd.read_csv(current, sep='|')
+        current = load_hospitals(current)
 
     loc_cols = ['Latitude', 'Longitude']
     no_data = current[loc_cols].isnull().all(axis=1)
@@ -167,13 +160,12 @@ def update_transfer_destinations(data=None):
         that don't yet have one stored. Doesn't overwrite any data.
     '''
     if data is None:
-        data = master_list_offline()
-        savedir = MASTER_LIST_HAN
+        data = load_hospitals()
+        savedir = MASTER_LIST_OFFLINE
     else:
         savedir = data
-        data = pd.read_csv(data, sep='|')
+        data = load_hospitals(data)
 
-    data.set_index('HOSP_ID', inplace=True)
     # only calculate info for hospitals we dont have data for yet
     no_destination = data[['destination', 'destinationID',
                            'transfer_time']].isnull().any(axis=1)
@@ -220,4 +212,4 @@ def update_transfer_destinations(data=None):
             data.loc[i, 'destination'] = hospital_name
 
         # save after each iteration to minimize data loss on crash/cancel
-        _save_master_list(data.reset_index(), savedir=savedir)
+        _save_master_list(data, savedir=savedir)

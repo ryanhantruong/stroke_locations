@@ -26,9 +26,6 @@ states_str = '_'.join(states)
 times.get_travel_times(point_file=f'data\points\{states_str}_n={nsample}.csv',
                        allow_large=True,
                        hospital_address=addy_path)
-times.get_travel_times(point_file=f'data\points\{states_str}_n={nsample}.csv',
-                       allow_large=True,
-                       hospital_address=addy_path)
 
 # Remove identifiers from data
 key_path = data_io.DTN_PATH / f'hospital_keys_master_v2.csv'

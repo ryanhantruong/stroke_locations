@@ -44,6 +44,12 @@ def generate_points(states=['Connecticut'], n=1000, name=None):
     return grid
 
 
+def load_points(points_path):
+    points = pd.read_csv(points_path)
+    if 'LOC_ID' in points.columns: points.set_index('LOC_ID', inplace=True)
+    return points
+
+
 def generate_points_age_adjusted(states=['New York'], n=1000, name=None):
     '''
     Generate a set of points randomly distributed across the given states
