@@ -28,7 +28,7 @@ def get_us_county_shapefiles():
     return gdf
 
 
-def are_all_counties_are_included(sfs, gdf):
+def are_all_counties_included(sfs, gdf):
     sfs['COUNTYFP'] = sfs['GEO.id2'].apply(lambda x: x[:5])
     state_counties = gdf.loc[gdf.STATEFP == state_fip, 'GEOID']
     result = True
@@ -85,7 +85,7 @@ for state_abbr in state_abbrs:
     )  # incase a county is included twice
 
     # check to make sure all counties are included in analysis
-    checkresult = are_all_counties_are_included(sfs, gdf)
+    checkresult = are_all_counties_included(sfs, gdf)
     if checkresult:
         sfs.to_csv(SF2010_OUTPATH /
                    f'{state_abbr}_blocks_from_all_counties.csv',
