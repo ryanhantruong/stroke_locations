@@ -3,7 +3,7 @@
 This repo provides Python 3 scripts to generate input data for simulations of a [stroke triage model](https://github.com/eschenfeldt/stroke). Specifically, it can be used to generate a set of locations in any state or states, randomly distributed by population (according to the 2010 census), and then can use [Google maps](https://github.com/googlemaps/google-maps-services-python) to compute travel times between those points and nearby stroke-certified hospitals.
 
 ## Run All ##
-Check out run_all.py to see execution flow
+Create a data_io.py from the template data_io_example.py. Then follow instructions in run_all.py
 
 ## Random locations ##
 
