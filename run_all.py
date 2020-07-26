@@ -12,7 +12,8 @@ import data_io
 # Generate patient locations
 # nsample locs across all X states, not nsample locs per state
 states = ['NY', 'MA', 'NJ', 'CT', 'NH', 'RI', 'ME', 'VT']
-nsample = 100
+nsample = 10000
+states_str = '_'.join(states)
 population.generate_points(states=states, n=nsample)
 # will create csv in 'data\points\{states_str}_n={nsample}.csv'
 
@@ -25,8 +26,7 @@ hospitals.update_transfer_destinations(addy_path)
 
 # Careful
 # Need Gmaps, expensive operation
-states_str = '_'.join(states)
-times.get_travel_times(point_file=f'data\points\{states_str}_n={nsample}.csv',
+times.get_travel_times(point_file=f'data/points/{states_str}_n={nsample}.csv',
                        allow_large=True,
                        hospital_address=addy_path)
 # will create csv in 'data\travel_times\{states_str}_n={nsample}.csv'
@@ -36,5 +36,5 @@ key_path = data_io.DTN_PATH / f'hospital_keys_master_v2.csv'
 anonymize.prepare(time_file=f'data/travel_times/{states_str}_n={nsample}.csv',
                   hospital_address=addy_path,
                   hospital_key=key_path)
-# Will create csv in output/points and output/times
+# Will create csv in output/hospitals and output/times
 # Used these csv as inputs for stroke model

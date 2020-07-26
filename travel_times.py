@@ -15,6 +15,8 @@ if not os.path.isdir(TIMES_DIR):
     os.makedirs(TIMES_DIR)
 LARGE_LIMIT = 10
 
+def read_travel_times(time_file):
+    return pd.read_csv(time_file,low_memory=False,index_col='LOC_ID')
 
 def _get_travel_times_csv(times_path, points, all_hospitals):
     times_path = Path(times_path)

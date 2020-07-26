@@ -3,7 +3,9 @@ import os
 import argparse
 import pandas as pd
 import hospitals
-import tools
+import travel_times
+import data_io
+
 
 HOSPITALS_OUT = os.path.join('output', 'hospitals')
 if not os.path.isdir(HOSPITALS_OUT):
@@ -19,44 +21,31 @@ def prepare(time_file,hospital_address=None,hospital_key=None):
         times file with identifying information removed.
     '''
     name = os.path.basename(time_file)
-    times = pd.read_csv(time_file).set_index('LOC_ID')
-    # Deidentify
-    times = times.drop(columns=['Latitude', 'Longitude'])
+    times = travel_times.read_travel_times(time_file)
+    # Deidentify, drop columns that show locations/not needed
+    times = times.drop(columns=['Latitude', 'Longitude','Need_Update'])
     hosp_ids = [x for x in times.columns]
 
-    if hospital_address is None:
-        all_hospitals = hospitals.master_list_offline()
-    else:
-        all_hospitals = pd.read_csv(hospital_address,sep='|')
-    all_hospitals.set_index('HOSP_ID',inplace=True)
+    if hospital_address is None: hospital_address = data_io.HOSPITAL_ADDY
+    all_hospitals = hospitals.load_hospitals(hospital_address)
     hosps = all_hospitals[all_hospitals.index.isin(hosp_ids)]
-
-    hosp_count = hosps.shape[0]
-    print(f'Found {hosp_count} hospitals')
-    if hosp_count == 0:
-        raise ValueError('No hospitals found; check files')
+    if hosps.shape[0] == 0: raise ValueError('No hospitals found; check files')
 
     # deidentify AHA_ID into HOSP_KEY
     # if AHA_ID is not in dictionary's key, returns original AHA_ID
-    if hospital_key is None:
-        hosp_keys = tools.get_hosp_keys()
-    else:
-        keys_df = pd.read_csv(hospital_key).set_index('HOSP_ID')
-        hosp_keys = keys_df['HOSP_KEY'].to_dict()
+    if hospital_key is None: hosp_keys = data_io.get_hosp_keys()
+    hosp_keys = data_io.get_hosp_keys(hospital_key)
+    # Deidentify ID into key
     hosps.rename(hosp_keys,axis=0,inplace=True)
     hosps.index.name='HOSP_KEY'
-    hosps['destination_KEY']=hosps['destinationID'].map(hosp_keys,na_action='ignore')
-    # deidentify column names (HOSP_ID) in times
-    times.columns = times.columns.map(hosp_keys)
+    # Deidentify transfer destination ID to key
+    hosps['destination_KEY']=hosps['destinationID'].map(hosp_keys,
+                                                        na_action='ignore')
+    # Only keep columns that are needed
+    hosps = hosps[['CenterType','Source','transfer_time','destination_KEY']]
 
-    hosps = hosps.drop(
-        columns=[
-            'OrganizationName', 'City', 'State', 'PostalCode','Original_ID_Name',
-            'AHA_ID','OrganizationId',
-            'Name', 'Source_Address','Address', 'Failed_Lookup','destinationID',
-            'Latitude', 'Longitude', 'destination',
-        ]
-    )
+    # Deidentify the column names (HOSP_ID) in times
+    times.columns = times.columns.map(hosp_keys)
 
     times.to_csv(os.path.join(TIMES_OUT, name))
     hosps.to_csv(os.path.join(HOSPITALS_OUT, name))
