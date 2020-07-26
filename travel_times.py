@@ -79,10 +79,11 @@ def get_travel_times(point_file, allow_large=False, hospital_address=None):
         times = prim_time.join(
             comp_time.drop(columns=['Latitude', 'Longitude']))
         all_times.update(times, overwrite=True)
+        all_times.loc[loc_id,'Need_Update'] = False
         all_times.to_csv(all_times_path)
 
 
-def _get_travel_times_for_one_point(point, some_hospitals, desc=None):
+def _get_travel_times_for_one_point(point, some_hospitals, desc=None, with_traffic=True):
     '''
     Get travel times for a subset of hospitals (using only this subset to
         determine which are "nearby")
@@ -107,9 +108,16 @@ def _get_travel_times_for_one_point(point, some_hospitals, desc=None):
         grid_loc = geo.extract_locations(point.loc[[i]])
         hosp_locs = geo.extract_locations(some_hospitals.loc[include.index])
 
-        matrix = client.distance_matrix(origins=grid_loc,
-                                        destinations=hosp_locs,
-                                        mode='driving')
+        if with_traffic:
+            matrix = client.distance_matrix(origins=grid_loc,
+                                            destinations=hosp_locs,
+                                            mode='driving',
+                                            departure_time=geo.get_depart_time(),
+                                            traffic_model='pessimistic')
+        else:
+            matrix = client.distance_matrix(origins=grid_loc,
+                                            destinations=hosp_locs,
+                                            mode='driving')
 
         for this_row in matrix['rows']:
 
@@ -118,6 +126,9 @@ def _get_travel_times_for_one_point(point, some_hospitals, desc=None):
                 col = include.index[j]
                 if el['status'] == 'OK':
                     val = el['duration']['value'] / 60
+                    if 'duration_in_traffic' in list(el.keys()):
+                        tfc =  el['duration_in_traffic']['value'] / 60
+                        val = ','.join([str(val),str(tfc)])
                 else:
                     val = np.NaN
                 times.loc[i, col] = val
