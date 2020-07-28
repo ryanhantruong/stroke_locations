@@ -61,8 +61,8 @@ def get_travel_times(point_file, allow_large=False, hospital_address=None):
     all_times_path = os.path.join(TIMES_DIR, os.path.basename(point_file))
     all_times = _get_travel_times_csv(all_times_path, points, all_hospitals)
 
-    prim_data = all_hospitals[all_hospitals.CenterType == 'Primary']
-    comp_data = all_hospitals[all_hospitals.CenterType == 'Comprehensive']
+    # prim_data = all_hospitals[all_hospitals.CenterType == 'Primary']
+    # comp_data = all_hospitals[all_hospitals.CenterType == 'Comprehensive']
 
     # Determine locations need to be calculated for
     # rows with all NaN values for all columns
@@ -74,12 +74,13 @@ def get_travel_times(point_file, allow_large=False, hospital_address=None):
     for loc_id, point in pbar:
         pbar.set_description(f"Processing {loc_id}")
         point = point.to_frame().T
-        prim_time = _get_travel_times_for_one_point(point, prim_data,
-                                                    'Primaries')
-        comp_time = _get_travel_times_for_one_point(point, comp_data,
-                                                    'Comprehensives')
-        times = prim_time.join(
-            comp_time.drop(columns=['Latitude', 'Longitude']))
+        # calling Gmap requests for prim and comprehensive seperately
+        # makes it really expensive and not needed
+        # limit to 25 hospitals overall, not by type
+        times = _get_travel_times_for_one_point(point, all_hospitals,
+                                                    'Centers')
+        # times = prim_time.join(
+        #     comp_time.drop(columns=['Latitude', 'Longitude']))
         all_times.update(times, overwrite=True)
         all_times.loc[loc_id,'Need_Update'] = False
         all_times.to_csv(all_times_path)
