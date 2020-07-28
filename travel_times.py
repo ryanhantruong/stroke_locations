@@ -62,7 +62,7 @@ def get_travel_times(point_file, allow_large=False, hospital_address=None):
     all_times = _get_travel_times_csv(all_times_path, points, all_hospitals)
 
     # prim_data = all_hospitals[all_hospitals.CenterType == 'Primary']
-    # comp_data = all_hospitals[all_hospitals.CenterType == 'Comprehensive']
+    comp_data = all_hospitals[all_hospitals.CenterType == 'Comprehensive']
 
     # Determine locations need to be calculated for
     # rows with all NaN values for all columns
@@ -76,17 +76,26 @@ def get_travel_times(point_file, allow_large=False, hospital_address=None):
         point = point.to_frame().T
         # calling Gmap requests for prim and comprehensive seperately
         # makes it really expensive and not needed
-        # limit to 25 hospitals overall, not by type
+        # limit to 20 hospitals overall, not by type
         times = _get_travel_times_for_one_point(point, all_hospitals,
                                                     'Centers')
-        # times = prim_time.join(
-        #     comp_time.drop(columns=['Latitude', 'Longitude']))
+        # check if there's any comprehensive center
+        # if there isn't any, add in travel time for 5 closest Comprehensives
+        hospital_ids = times.drop(['Latitude', 'Longitude']).columns
+        if (all_hospitals.loc[hospital_ids,'CenterType'] == 'Comprehensive').all():
+            ctimes = _get_travel_times_for_one_point(point, comp_data,
+                                                    'Additional Comprehensives',
+                                                    max_n_hosps=5)
+            times = times.join(
+                ctimes.drop(columns=['Latitude', 'Longitude']))
+            
         all_times.update(times, overwrite=True)
         all_times.loc[loc_id,'Need_Update'] = False
         all_times.to_csv(all_times_path)
 
 
-def _get_travel_times_for_one_point(point, some_hospitals, desc=None, with_traffic=True):
+def _get_travel_times_for_one_point(point, some_hospitals, desc=None, with_traffic=True,
+                                    max_n_hosps=20):
     '''
     Get travel times for a subset of hospitals (using only this subset to
         determine which are "nearby")
@@ -103,11 +112,11 @@ def _get_travel_times_for_one_point(point, some_hospitals, desc=None, with_traff
     for i in times.index:
         hosps = distances.loc[i]
         include = hosps[hosps < hosps.Cutoff]
-        if len(include) > 25:
+        if len(include) > max_n_hosps:
             # distance_matrix can only take 25 destinations, and we shouldn't
             #   need to consider 25 hospitals anyway, so just drop farther away
             #   ones if they're still there after the cutoff
-            include = include.sort_values().head(25)
+            include = include.sort_values().head(max_n_hosps)
         grid_loc = geo.extract_locations(point.loc[[i]])
         hosp_locs = geo.extract_locations(some_hospitals.loc[include.index])
 
